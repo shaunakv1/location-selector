@@ -1,0 +1,11 @@
+Setup: When pulling this down for first time
+1. Rename js/app-name.json with app specific name, ex. js/enow.json
+2. Rename css/less/app-name.less with app specific name, ex. css/less/enow.less
+3. In Gruntfile.js and package.json rename corresponding "app-name"
+
+4. Use app-name.json to manage app libraries and js files.  Rather than adding to index.html, add them to the config file.  Grunt will build an single js file that is called in index.thml 
+
+4. From Nodejs, navigate to project folder, run "npm install", wait as packages download.  Packages are pulled based on config in package.json
+5. run "Grunt". This will build and app specific concatanated js file, compile less and build a min.css. Also adds watcher to recompile these files when less and js files are updated. 
+NOTE: When committing make sure to Ignore node-modules
+

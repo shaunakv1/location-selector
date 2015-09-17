@@ -1,0 +1,8 @@
+[
+    "js/lib/jquery.min.js",
+    "js/lib/accessifyhtml5.min.js",
+    "js/lib/typeahead.bundle.min.js",
+    "js/lib/ol.min.js",
+    "js/app/locationselector.js",
+    "js/app/app.js"
+]
