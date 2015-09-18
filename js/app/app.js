@@ -52,4 +52,12 @@
         },
     });
 
+    $('#locationSelectOutput').flowtype({
+        minimum   : 380,
+        maximum   : 1200,
+        minFont   : 12,
+        maxFont   : 40,
+        fontRatio : 25
+    });
+
 }(this, this.document));
