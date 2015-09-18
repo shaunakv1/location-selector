@@ -1,24 +1,50 @@
 @autocomplete-width: 100%;
+@autocomplete-height: 40px;
+@autocomplete-font-size: 20px;
+@autocomplete-theme-color: #191818;
+@autocomplete-highlight-color:#51cbee;
 
 .twitter-typeahead{
    width: @autocomplete-width;
-  .tt-hint{
-
-  }
-  .tt-input{
+  
+  .tt-input,.tt-hint{
     width: inherit;
+    height: @autocomplete-height;
+    line-height: @autocomplete-height;
+    font-size: @autocomplete-font-size;
+    color: @autocomplete-theme-color;
+
+    transition: all 0.30s ease-in-out;
+    outline: none;
+    padding: 3px 0px 3px 3px;
+    margin: 5px 1px 3px 0px;
+    border: 1px solid lighten(@autocomplete-theme-color, 70%);  
+
+    &:focus{
+      box-shadow: 0 0 5px @autocomplete-highlight-color;
+      padding: 3px 0px 3px 3px;
+      margin: 5px 1px 3px 0px;
+      border: 1px solid @autocomplete-highlight-color;
+    }
   }
+  
+  .tt-hint{
+    color: lighten(@autocomplete-theme-color, 70%);
+  }
+
   .tt-menu{
     width: inherit;
-    background: #fff;
+    border: 1px solid lighten(@autocomplete-theme-color, 70%);
+    background: #eee;
     opacity: 0.9;
-
+    
     .tt-dataset{
       .tt-suggestion{
         padding: 10px;
       }
       .tt-cursor{
           background: #191818;
+          color: contrast(@autocomplete-theme-color);
           opacity: 0.9;
       }
     }

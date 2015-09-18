@@ -1,6 +1,6 @@
 (function (window, document) {
     AccessifyHTML5();
-    
+    prettyPrint();
     var layout   = document.getElementById('layout'),
         menu     = document.getElementById('menu'),
         menuLink = document.getElementById('menuLink');
@@ -47,6 +47,8 @@
         },
         onLocationSelect: function(location){
             console.log(location);
+            $('#locationSelectOutput').removeClass('prettyprinted').html(JSON.stringify(location, null, 2));
+            prettyPrint();
         },
     });
 
