@@ -33,14 +33,13 @@
         toggleClass(menuLink, active);
     };
 
-
-
     var ls = new LocationSelector({
         inputTargetId : 'autocomplete',
         map:{
             target: 'map',
             //width: 550, use full width
             /*height: 500,*/
+           // basemapUrl: 'http://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
         },
         error: function (error) {
             console.log(error.message);

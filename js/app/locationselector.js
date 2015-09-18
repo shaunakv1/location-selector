@@ -11,7 +11,8 @@
  *        width: 550, // optional
  *        height: 550, // optional
  *        center: [-11173259.046613924, 4441908.587708162], //optional
- *        zoom: 17 //optional
+ *        zoom: 17, //optional
+ *        basemapUrl: 'http://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}' //optional
  *      },
  *    onLocationSelect: function(location){
  *      //location.address
@@ -28,7 +29,8 @@
  */
 
 var LocationSelector = function (options){
-  
+  var vm = this;
+
   var esriGeocodeServer = 'http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer';
 
   var arcGISSource = new Bloodhound({
@@ -62,10 +64,7 @@ var LocationSelector = function (options){
     displayKey: 'value',
   });
   
-  
-
   $('#'+options.inputTargetId).bind('typeahead:select', function(ev, suggestion) {
-    //console.log(suggestion);
     $.getJSON(esriGeocodeServer + '/find?f=json&callback=?', {
       text : suggestion.value,
       magicKey: suggestion.magicKey
@@ -75,20 +74,26 @@ var LocationSelector = function (options){
         var f = response.locations[0].feature;
         var e = response.locations[0].extent;
     
-        map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), map.getSize());
-        map.getView().setCenter(ol.proj.fromLonLat([f.geometry.x, f.geometry.y]));
-        geocodedMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([f.geometry.x, f.geometry.y])));
+        if(vm.MAP){
+          map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), map.getSize());
+          map.getView().setCenter(ol.proj.fromLonLat([f.geometry.x, f.geometry.y]));
+          geocodedMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([f.geometry.x, f.geometry.y])));
+          
+          dragCollection.clear();
+          dragCollection.push(geocodedMarker);
+        }
         
-        dragCollection.clear();
-        dragCollection.push(geocodedMarker);
-
-        //inform the new location to the registered callback
-        if(options.onLocationSelect) options.onLocationSelect({
+        //create a object to store selected location
+        var selectedLocation = {
           address: suggestion.value, 
           coordinates: f.geometry,
           extents: [e.xmin, e.ymin, e.xmax, e.ymax].join(','),
-          zoom: map.getView().getZoom()
-        });
+        };
+        
+        if(vm.MAP) selectedLocation.zoom = map.getView().getZoom();
+
+        //inform the new location to the registered callback
+        if(options.onLocationSelect) options.onLocationSelect(selectedLocation);
       }
       else{
         if(options.error) options.error({message: "Sorry no locations found! Please try another address or location" })
@@ -98,89 +103,86 @@ var LocationSelector = function (options){
 
   });
 
-  
-  //clear out any thing in the map div
-  $('#'+options.map.target).empty();
+  if(options.map)
+    enableMap();
 
-  
+  function enableMap() {
+    //clear out any thing in the map div
+      $('#'+options.map.target).empty();
 
-  var initialCenter = [-11173259.046613924, 4441908.587708162];
-  var initialZoom = 3;
+      var initialCenter = [-11173259.046613924, 4441908.587708162];
+      var initialZoom = 3;
 
-  if(options.map.center){
-    initialCenter = ol.proj.fromLonLat(options.map.center);
-  }
+      if(options.map.center){
+        initialCenter = ol.proj.fromLonLat(options.map.center);
+      }
 
-  if(options.map.zoom){
-    initialZoom = options.map.zoom;
-  }
+      if(options.map.zoom){
+        initialZoom = options.map.zoom;
+      }
 
-  // initialize the map
-  var map = new ol.Map({
-    layers: [
-      new ol.layer.Tile({
-        source: new ol.source.XYZ({
-          url: 'http://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
+      // initialize the map
+      var map = new ol.Map({
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.XYZ({
+              url: options.map.basemapUrl || 'http://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
+            })
+          })
+        ],
+        target: options.map.target,
+        view: new ol.View({
+          center: initialCenter,
+          zoom: initialZoom
         })
-      })/*,
-      new ol.layer.Tile({
-        source: new ol.source.XYZ({
-          url: 'http://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
-        })
-      })*/
-    ],
-    target: options.map.target,
-    view: new ol.View({
-      center: initialCenter,
-      zoom: initialZoom
-    })
-  });
-  
-  
-  // add location marker to the map
-  var geocodedMarker = new ol.Feature(new ol.geom.Point(initialCenter));
-
-  var markerLayer = new ol.layer.Vector({
-    source: new ol.source.Vector({
-      features: [geocodedMarker]
-    }),
-    style: new ol.style.Style({
-      image: new ol.style.Icon({
-        src: options.map.markerIconUrl || "http://leafletjs.com/dist/images/marker-icon.png"
-      })
-    })
-   });
-
-  map.addLayer(markerLayer);
-
-  // add drag interaction
-  var dragCollection = new ol.Collection([geocodedMarker]);
-  var drag = new ol.interaction.Modify({
-      features: dragCollection,
-      style: null
-  });
-
-  drag.on('modifyend',function(event){
-      var c = ol.proj.toLonLat(event.features.getArray()[0].getGeometry().getCoordinates());
-
-      var coordinates = {x: c[0], y: c[1]};
+      });
       
-      //inform the new location to the registered callback
-      if(options.onLocationSelect) options.onLocationSelect({
-          coordinates: coordinates,
-          zoom: map.getView().getZoom(),
-          address: null,
-          extents: null
-        });
-  });
+      
+      // add location marker to the map
+      var geocodedMarker = new ol.Feature(new ol.geom.Point(initialCenter));
 
-  map.addInteraction(drag);
+      var markerLayer = new ol.layer.Vector({
+        source: new ol.source.Vector({
+          features: [geocodedMarker]
+        }),
+        style: new ol.style.Style({
+          image: new ol.style.Icon({
+            src: options.map.markerIconUrl || "http://leafletjs.com/dist/images/marker-icon.png"
+          })
+        })
+       });
 
-  //setup map div's width and height if specified by user, else ol3 will use current DOM width and height
-  if(options.map.width) $('#'+options.map.target).width(options.map.width);
-  if(options.map.height) $('#'+options.map.target).height(options.map.height);
-  
-  this.MAP = map;
+      map.addLayer(markerLayer);
+
+      // add drag interaction
+      var dragCollection = new ol.Collection([geocodedMarker]);
+      var drag = new ol.interaction.Modify({
+          features: dragCollection,
+          style: null
+      });
+
+      drag.on('modifyend',function(event){
+          var c = ol.proj.toLonLat(event.features.getArray()[0].getGeometry().getCoordinates());
+
+          var coordinates = {x: c[0], y: c[1]};
+          
+          //inform the new location to the registered callback
+          if(options.onLocationSelect) options.onLocationSelect({
+              coordinates: coordinates,
+              zoom: map.getView().getZoom(),
+              address: null,
+              extents: null
+            });
+      });
+
+      map.addInteraction(drag);
+
+      //setup map div's width and height if specified by user, else ol3 will use current DOM width and height
+      if(options.map.width) $('#'+options.map.target).width(options.map.width);
+      if(options.map.height) $('#'+options.map.target).height(options.map.height);
+      
+      vm.MAP = map;
+  }
 } // end of LocationSelector class
 
 
