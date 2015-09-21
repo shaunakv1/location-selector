@@ -80,12 +80,11 @@ h={};g()}};typeof define==="function"&&define.amd&&define("google-code-prettify"
  *      console.log(err.message)
  *    }
  * })
- *
- * 
  */
 
 var LocationSelector = function (options){
   var vm = this;
+  vm.options = options;
 
   var esriGeocodeServer = 'http://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer';
 
@@ -123,7 +122,7 @@ var LocationSelector = function (options){
 
   $('#'+options.inputTargetId).typeahead('destroy');
 
-  var th = $('#'+options.inputTargetId).typeahead({
+  $('#'+options.inputTargetId).typeahead({
     minLength: 3,
     highlight: true
   },
@@ -141,7 +140,10 @@ var LocationSelector = function (options){
     }, function (response) {
       
       if(response.locations.length > 0 ){
-        selectLocation(suggestion,response.locations[0]);
+        selectLocation({
+          location: response.locations[0],
+          address: suggestion.value
+        });
       }
       else{
         if(options.error) options.error({message: "Sorry no locations found! Please try another address or location" })
@@ -151,22 +153,18 @@ var LocationSelector = function (options){
 
   });
 
-  if(options.map)
-    enableMap();
+  
+  if(options.map) enableMap();    
 
   function enableMap() {
     //clear out any thing in the map div
       $('#'+options.map.target).empty();
 
       var initialCenter = [-11173259.046613924, 4441908.587708162];
-      var initialZoom = 3;
+      var initialZoom = options.map.zoom || 3;
 
       if(options.map.center){
         initialCenter = ol.proj.fromLonLat(options.map.center);
-      }
-
-      if(options.map.zoom){
-        initialZoom = options.map.zoom;
       }
 
       // initialize the map
@@ -213,13 +211,14 @@ var LocationSelector = function (options){
 
           var coordinates = {x: c[0], y: c[1]};
           
+          //reverseGeocode(c[1]+","+c[0]);
           //inform the new location to the registered callback
-          if(options.onLocationSelect) options.onLocationSelect({
-              coordinates: coordinates,
-              zoom: map.getView().getZoom(),
-              address: null,
-              extents: null
-            });
+          selectLocation({
+            location: {feature: {geometry: coordinates }},
+            zoom: map.getView().getZoom(),
+            address: null,
+            disableMapUpdate: true
+          });
       });
 
       map.addInteraction(drag);
@@ -235,8 +234,13 @@ var LocationSelector = function (options){
     return query.match(/^[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?),\s*[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/);
   }
 
+  /**
+   * [reverseGeocode Send a reversegeocode query to ESRI's reversegeocode server]
+   * @param  {[type]} query [Example "32.80252,-80.0929" (lat,lon)]
+   * @return {[promise]}       [returns a promise for reverse geocode API]
+   */
   function reverseGeocode(query){
-    $.getJSON(esriGeocodeServer + '/reverseGeocode?f=json&callback=?', {
+    return $.getJSON(esriGeocodeServer + '/reverseGeocode?f=json&callback=?', {
       location : JSON.stringify({
         "x": query.split(',')[1],
         "y": query.split(',')[0],
@@ -247,27 +251,55 @@ var LocationSelector = function (options){
     }, function (response) {
         if(response.location && response.address){
           console.log(response);
-          selectLocation(
-            {
-              value: response.address.Match_addr
+          
+          selectLocation({
+            location:{
+              feature: { geometry: response.location }
             },
-            response.location
-          );
+            address:response.address.Match_addr
+          });
 
         }
         else if(response.error){
-          console.log("cannot reverse geocode these coordinates");
+          console.log(response);
+          
+          selectLocation({
+            location:{ 
+                feature: { geometry: { x: query.split(',')[1], y: query.split(',')[0] } },
+            },
+            address: null,
+            error:{ 
+              message: response.error.details[0]
+            }
+          });
 
         }
     });
   }
 
-  function selectLocation (suggestion,location) {
-    var f = location.feature;
-    var e = location.extent;
+  /**
+   * options: {
+   *        location:{ 
+   *            feature: { geometry: { x: xcoord , y: ycoord } },
+   *            extent: [xmin,ymin,xmax,ymax]
+   *        },
+   *        address: Some Address String or null,
+   *        zoom: ideal map zoom or null
+   *        disableMapUpdate: true or false 
+   *        error:{ 
+   *          message: "Error Message"
+   *        }
+   *      }
+   */
+  function selectLocation (options) {
+    console.log(options);
 
-    if(vm.map && e){
-      vm.map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), vm.map.getSize());
+    var f = options.location.feature;
+    var e = options.location.extent;
+
+    if(vm.map && !options.disableMapUpdate){
+      if(e) vm.map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), vm.map.getSize());
+      
       vm.map.getView().setCenter(ol.proj.fromLonLat([f.geometry.x, f.geometry.y]));
       vm.geocodedMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([f.geometry.x, f.geometry.y])));
       
@@ -277,19 +309,20 @@ var LocationSelector = function (options){
     
     //create a object to store selected location
     var selectedLocation = {
-      address: suggestion.value
+      address: options.address,
+      coordinates: f.geometry
     };
-    //32.80252,-80.0929
-    if(f) selectedLocation.coordinates = f.geometry;
-    
-    if(location.x && location.y) selectedLocation.coordinates = location;
 
+    //32.80252,-80.0929
     if(e) selectedLocation.extents = [e.xmin, e.ymin, e.xmax, e.ymax].join(',');
 
-    if(vm.map) selectedLocation.zoom = vm.map.getView().getZoom();
+    if(options.error) selectedLocation.error = options.error.message;
+
+    if(options.zoom) options.zoom;
+    else if(vm.map) selectedLocation.zoom = vm.map.getView().getZoom();
 
     //inform the new location to the registered callback
-    if(options.onLocationSelect) options.onLocationSelect(selectedLocation);
+    if(vm.options.onLocationSelect) vm.options.onLocationSelect(selectedLocation);
   }
 
 } // end of LocationSelector class
