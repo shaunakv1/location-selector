@@ -37,6 +37,7 @@
         inputTargetId : 'autocomplete',
         map:{
             target: 'map',
+            markerIconUrl: 'img/marker.png'
             //width: 550, use full width
             /*height: 500,*/
            // basemapUrl: 'http://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'

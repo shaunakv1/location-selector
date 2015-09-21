@@ -104,12 +104,26 @@ var LocationSelector = function (options){
         }
       }
   });
+  
+  // typeahead.js bloodhound hack: hijacking the search function to
+  // catch lat,lon or bbox input which should not be sent to the autocomplete
+  arcGISSource.searchProxy =  arcGISSource.search;
+
+  arcGISSource.search =  function (query, sync, async) {
+    if(isLatLon(query)) {
+      console.log(query);
+      reverseGeocode(query);
+    }
+    else{
+      arcGISSource.searchProxy(query, sync, async);
+    }
+  }
 
   arcGISSource.initialize();
 
   $('#'+options.inputTargetId).typeahead('destroy');
 
-  $('#'+options.inputTargetId).typeahead({
+  var th = $('#'+options.inputTargetId).typeahead({
     minLength: 3,
     highlight: true
   },
@@ -127,29 +141,7 @@ var LocationSelector = function (options){
     }, function (response) {
       
       if(response.locations.length > 0 ){
-        var f = response.locations[0].feature;
-        var e = response.locations[0].extent;
-    
-        if(vm.MAP){
-          map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), map.getSize());
-          map.getView().setCenter(ol.proj.fromLonLat([f.geometry.x, f.geometry.y]));
-          geocodedMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([f.geometry.x, f.geometry.y])));
-          
-          dragCollection.clear();
-          dragCollection.push(geocodedMarker);
-        }
-        
-        //create a object to store selected location
-        var selectedLocation = {
-          address: suggestion.value, 
-          coordinates: f.geometry,
-          extents: [e.xmin, e.ymin, e.xmax, e.ymax].join(','),
-        };
-        
-        if(vm.MAP) selectedLocation.zoom = map.getView().getZoom();
-
-        //inform the new location to the registered callback
-        if(options.onLocationSelect) options.onLocationSelect(selectedLocation);
+        selectLocation(suggestion,response.locations[0]);
       }
       else{
         if(options.error) options.error({message: "Sorry no locations found! Please try another address or location" })
@@ -195,11 +187,10 @@ var LocationSelector = function (options){
       
       
       // add location marker to the map
-      var geocodedMarker = new ol.Feature(new ol.geom.Point(initialCenter));
-
+      vm.geocodedMarker = new ol.Feature(new ol.geom.Point(initialCenter));
       var markerLayer = new ol.layer.Vector({
         source: new ol.source.Vector({
-          features: [geocodedMarker]
+          features: [vm.geocodedMarker]
         }),
         style: new ol.style.Style({
           image: new ol.style.Icon({
@@ -211,9 +202,9 @@ var LocationSelector = function (options){
       map.addLayer(markerLayer);
 
       // add drag interaction
-      var dragCollection = new ol.Collection([geocodedMarker]);
+      vm.dragCollection = new ol.Collection([vm.geocodedMarker]);
       var drag = new ol.interaction.Modify({
-          features: dragCollection,
+          features: vm.dragCollection,
           style: null
       });
 
@@ -237,8 +228,70 @@ var LocationSelector = function (options){
       if(options.map.width) $('#'+options.map.target).width(options.map.width);
       if(options.map.height) $('#'+options.map.target).height(options.map.height);
       
-      vm.MAP = map;
+      vm.map = map;
   }
+
+  function isLatLon(query){
+    return query.match(/^[-+]?([1-8]?\d(\.\d+)?|90(\.0+)?),\s*[-+]?(180(\.0+)?|((1[0-7]\d)|([1-9]?\d))(\.\d+)?)$/);
+  }
+
+  function reverseGeocode(query){
+    $.getJSON(esriGeocodeServer + '/reverseGeocode?f=json&callback=?', {
+      location : JSON.stringify({
+        "x": query.split(',')[1],
+        "y": query.split(',')[0],
+        "spatialReference": {
+            "wkid": 4326
+        }
+      })
+    }, function (response) {
+        if(response.location && response.address){
+          console.log(response);
+          selectLocation(
+            {
+              value: response.address.Match_addr
+            },
+            response.location
+          );
+
+        }
+        else if(response.error){
+          console.log("cannot reverse geocode these coordinates");
+
+        }
+    });
+  }
+
+  function selectLocation (suggestion,location) {
+    var f = location.feature;
+    var e = location.extent;
+
+    if(vm.map && e){
+      vm.map.getView().fit(ol.proj.transformExtent([e.xmin, e.ymin, e.xmax, e.ymax], 'EPSG:4326' ,'EPSG:3857'), vm.map.getSize());
+      vm.map.getView().setCenter(ol.proj.fromLonLat([f.geometry.x, f.geometry.y]));
+      vm.geocodedMarker.setGeometry(new ol.geom.Point(ol.proj.fromLonLat([f.geometry.x, f.geometry.y])));
+      
+      vm.dragCollection.clear();
+      vm.dragCollection.push(vm.geocodedMarker);
+    }
+    
+    //create a object to store selected location
+    var selectedLocation = {
+      address: suggestion.value
+    };
+    //32.80252,-80.0929
+    if(f) selectedLocation.coordinates = f.geometry;
+    
+    if(location.x && location.y) selectedLocation.coordinates = location;
+
+    if(e) selectedLocation.extents = [e.xmin, e.ymin, e.xmax, e.ymax].join(',');
+
+    if(vm.map) selectedLocation.zoom = vm.map.getView().getZoom();
+
+    //inform the new location to the registered callback
+    if(options.onLocationSelect) options.onLocationSelect(selectedLocation);
+  }
+
 } // end of LocationSelector class
 
 
@@ -285,6 +338,7 @@ LocationSelector.prototype.getMap = function() {
         inputTargetId : 'autocomplete',
         map:{
             target: 'map',
+            markerIconUrl: 'img/marker.png'
             //width: 550, use full width
             /*height: 500,*/
            // basemapUrl: 'http://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
